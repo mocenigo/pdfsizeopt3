@@ -1,4 +1,4 @@
-#! /usr/bin/python2.4
+#! /usr/bin/env python3
 # by pts@fazekas.hu at Tue Jul 21 16:14:10 CEST 2009
 
 import re
@@ -11,7 +11,7 @@ def main(argv):
 
   cfg_kname = (os.popen('kpsewhich --progname=dvipdfmx dvipdfmx.cfg')
               .read().rstrip('\n'))
-  for cfg_line in open(cfg_kname).xreadlines():
+  for cfg_line in open(cfg_kname):
     cfg_items = cfg_line.strip().split(None, 1)
     if len(cfg_items) == 2 and cfg_items[0] == 'f':
       map_list.append(cfg_items[1])
@@ -37,7 +37,7 @@ def main(argv):
                 .read().rstrip('\n'))
     assert map_kname, 'font map not found: %s' % map_name
  
-    for map_line in open(map_kname).xreadlines():
+    for map_line in open(map_kname):
       # A to-be-reencoded base font. Example:
       # ptmr8r Times-Roman "TeXBase1Encoding ReEncodeFont" <8r.enc
       match = re.match(r'\s*([^%\s]\S*)\s+(\S+)\s+(?:\d+\s+)?"([^"]*)"\s+'
@@ -46,14 +46,14 @@ def main(argv):
         #print map_line,
         tex_font_name = match.group(1)
         ps_font_name = match.group(2)
-        ps_instructions = ' %s ' % re.sub('\s+', ' ', match.group(3).strip())
+        ps_instructions = ' %s ' % re.sub('\\s+', ' ', match.group(3).strip())
         enc_file_name = match.group(4)
         dvipdfm_instructions = []
         # TODO(pts): Obey the order
-        match = re.match(' (\S+) SlantFont ', ps_instructions)
+        match = re.match(' (\\S+) SlantFont ', ps_instructions)
         if match:
           dvipdfm_instructions.append(' -s %s' % match.group(1))
-        match = re.match(' (\S+) ExtendFont ', ps_instructions)
+        match = re.match(' (\\S+) ExtendFont ', ps_instructions)
         if match:
           dvipdfm_instructions.append(' -e %s' % match.group(1))
         f.write('%s %s %s%s\n' %

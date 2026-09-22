@@ -42,11 +42,11 @@ If you are using an operating system other than Linux, Windows or macOS (on
 a computer with Intel processor), the easiest way to try pdfsizeopt is
 borrowing a friend's computer with Linux, Windows or macOS, or renting a
 Linux VM in the cloud. The reason why it's difficult to run pdfsizeopt on
-other kinds of systems is because pdfsizeopt has some required dependencies,
-some of them are old versions (e.g. Python 2.4--2.7, Ghostscript 9.05), so
-you'll have to compile the right versions of the dependencies first, which
-may take several hours and lots of frustrating trial-and-error even for
-experienced hackers.
+other kinds of systems is because pdfsizeopt has some required dependencies
+(e.g. imgdataopt or sam2p, jbig2, pngout) which are not packaged by most
+systems, so you'll have to compile them first, which may take some time
+even for experienced hackers. (pdfsizeopt itself works with Python 3.6 or
+later, and Ghostscript 9.05 or later, including Ghostscript 10.x.)
 
 It's technically possible to port pdfsizeopt to other systems (and make it
 easy to install), but the author of pdfsizeopt doesn't have the free time to
@@ -490,16 +490,26 @@ them from source.
 
 ## Installation instructions and usage on generic Unix
 
-Doing this is increasingly hard in 2023, because pdfsizeopt needs Python
-2.4--2.7 and Ghostscript 9.05, both very old, and thus hard to install to a
-modern system.
+pdfsizeopt works with Python 3.6 or later (tested with Python 3.9, 3.12,
+3.13 and 3.14) and Ghostscript 9.05 or later (tested with Ghostscript 9.05
+and 10.06), so these dependencies can be installed from the package manager
+of a modern system.
 
 There is no installer, you need to run some commands in the command line
 (black Command Prompt window) to download and install. pdfsizeopt is a
 command-line only application, there is no GUI.
 
-pdfizeopt is a Python script. It works with Python 2.4, 2.5, 2.6 and 2.7
-(but it doesn't work with Python 3.x). So please install Python first.
+pdfizeopt is a Python script. It works with Python 3.6 or later (it doesn't
+work with Python 2.x anymore). So please install Python 3 first.
+
+From a source checkout, the Python 3 version can be built and installed as
+the command `pdfsizeopt3` (so that it can be installed next to an old
+Python 2 `pdfsizeopt`) with:
+
+```
+  $ make check                   # Build pdfsizeopt3.single and test it.
+  $ make install PREFIX=$HOME    # Installs $HOME/bin/pdfsizeopt3.
+```
 
 Create a new directory named pdfsizeopt, and download this link there:
 https://raw.githubusercontent.com/pts/pdfsizeopt/master/pdfsizeopt.single
@@ -513,8 +523,8 @@ commands (without the leading `$`):
   $ chmod +x pdfsizeopt
 ```
 
-If your Python executable is not /usr/bin/python, then edit the first line
-(starting with `#!`) in the pdfsizeopt script accordingly.
+The pdfsizeopt script runs python3 found on the PATH. Alternatively, you can
+run it as `python3 pdfsizeopt ...`.
 
 Try it with:
 
@@ -528,11 +538,12 @@ them. Install as many as you can, and put them to the PATH.
 
 Dependencies:
 
-* Python (command: python). Version 2.4, 2.5, 2.6 and 2.7 work (3.x doesn't
+* Python (command: python3). Version 3.6 or later works (2.x doesn't
   work).
-* Ghostscript (command: gs): Version 9.05 is recommended, 8.50 should also
-  work, and some early 9.x versions such as 9.14.1 also work. The most
-  recent versions don't work, especially for font optimization.
+* Ghostscript (command: gs): Version 9.05 and 10.x (tested with 10.06) work,
+  8.50 should also work. To use a specific Ghostscript, set the
+  environment variable PDFSIZEOPT_GS to its command, e.g.
+  `PDFSIZEOPT_GS=/usr/local/bin/gs`.
 * jbig2 (command: jbig2): Install from source:
   https://github.com/pts/pdfsizeopt-jbig2
   If you are unable to install, use pdfsizeopt --use-jbig2=no .
@@ -755,7 +766,9 @@ pdfsizeopt_win32exec in the newest version has that file.
 
 ### 9. Ghostscript errors with Type1CParser and Type1CConverter
 
-Please install pdfsizeopt by following the installation instructions on
+Please make sure that you are using the latest pdfsizeopt, older versions
+don't work with Ghostscript 9.5x and 10.x. Alternatively, install pdfsizeopt
+by following the installation instructions on
 https://github.com/pts/pdfsizeopt . By doing so, pdfsizeopt will use
 Ghostscript 9.05 bundled with it, and it will work.
 

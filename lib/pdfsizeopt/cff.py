@@ -5,21 +5,13 @@ http://www.adobe.com/devnet/font/pdfs/5176.CFF.pdf
 """
 
 import re
-import struct
 
 from pdfsizeopt import float_util
+from pdfsizeopt.binstr import buffer, HexDecode, HexEncode
+# Binary data is represented as latin-1 str, see binstr.py.
+from pdfsizeopt.binstr import struct_latin1 as struct
 
-
-try:
-  from itertools import izip
-except ImportError:
-  def izip(*iterables):  # Fallback for pythonmu2.7-static.
-    iterables = map(iter, iterables)
-    while 1:
-      result = tuple(it.next() for it in iterables)  # Raises StopIteration.
-      if not result:
-        break
-      yield result
+izip = zip
 
 
 class Error(Exception):
@@ -433,15 +425,15 @@ def SerializeCffDict(cff_dict):
         # missing the '.' and 'e' in floating point literals.
         operand = float_util.FormatFloatShort(operand, is_int_ok=True)
         operand = operand.replace('e-', 'f')
-        nibbles = map(CFF_REAL_CHARS_REV.__getitem__, operand)
+        nibbles = list(map(CFF_REAL_CHARS_REV.__getitem__, operand))
         nibbles.append(0xf)
         if (len(nibbles) & 1) != 0:
           nibbles.append(0xf)
         output.append('\x1e')
         output.append(''.join(
             chr(nibbles[i] << 4 | nibbles[i + 1])
-            for i in xrange(0, len(nibbles), 2)))
-      elif isinstance(operand, int) or isinstance(operand, long):
+            for i in range(0, len(nibbles), 2)))
+      elif isinstance(operand, int):
         # This also covers bool (with False==0 and True==1). Good.
 
         if -107 <= operand <= 107:
@@ -499,7 +491,7 @@ def ParseCffIndex(data):
     j = ((count + 1) << 1) + 2
   elif off_size == 3:
     j, offsets = 3, []
-    for i in xrange(count + 1):
+    for i in range(count + 1):
       a, b = struct.unpack('>BH', buffer(data, j, 3))
       offsets.append(a << 16 | b)
       j += 3
@@ -514,7 +506,7 @@ def ParseCffIndex(data):
   if len(data) < j + offsets[count]:
     raise ValueError('CFF index too short for strings.')
   buffers = []
-  for i in xrange(count):
+  for i in range(count):
     if not (1 <= offsets[i] <= offsets[i + 1]):
       raise ValueError('Invalid CFF index offset: %d' % offsets[i])
     buffers.append(buffer(data, j + offsets[i], offsets[i + 1] - offsets[i]))
@@ -558,7 +550,7 @@ def ParseCffHeader(data, do_need_single_font=True, do_parse_rest=True):
   if not (1 <= cff_off_size <= 4):
     raise ValueError('Invalid CFF off_size: %d' % cff_off_size)
   if hdr_size < 4:
-    raise ValueError('CFF header too short, got: %d' % header_size)
+    raise ValueError('CFF header too short, got: %d' % hdr_size)
   ai1, font_name_bufs = ParseCffIndex(buffer(data, hdr_size))
   if not font_name_bufs:
     raise ValueError('CFF contains no fonts.')
@@ -725,8 +717,8 @@ def IsCffValueEqual(a, b):
   elif (isinstance(a, str) and isinstance(b, str) and
         (a.startswith('<') or b.startswith('<'))):
     return False
-  elif (isinstance(a, (str, float, int, long)) and
-        isinstance(b, (str, float, int, long))):
+  elif (isinstance(a, (str, float, int)) and
+        isinstance(b, (str, float, int))):
     # !!! '42.9139' vs '42.913898'
     return (float(a) - float(b)) < 1e-3  # !!! pGS has 0.04379, ParseCff1 has .043790001. for /Private.BlueScale in i=1.
     return float(a) == float(b)
@@ -737,17 +729,15 @@ def IsCffValueEqual(a, b):
 CFF_TOP_OP_DEFAULTS = [
     (op_name, op_default)
     for op, (op_name, op_type, op_default) in
-       sorted(CFF_TOP_OP_MAP.iteritems())
+       sorted(CFF_TOP_OP_MAP.items())
     if op_name not in ('charset', 'Encoding', 'CharStrings', 'Private') and
         op_default is not None]
-del op, op_name, op_type, op_default
 
 CFF_PRIVATE_OP_DEFAULTS = [
     (op_name, op_default)
     for op, (op_name, op_type, op_default) in
-       sorted(CFF_PRIVATE_OP_MAP.iteritems())
+       sorted(CFF_PRIVATE_OP_MAP.items())
     if op_name not in ('Subrs', 'GlobalSubrs') and op_default is not None]
-del op, op_name, op_type, op_default
 
 
 def RemoveCffDefaults(parsed_dict):
@@ -835,55 +825,55 @@ def GetParsedCffDifferences(a, b):
     if a is None and b is None:
       return True
     if type(a) != dict or type(b) != dict:
-      return false
+      return False
     # !! Better compare floats etc.
-    return sorted(a.iteritems()) == sorted(b.iteritems())
+    return sorted(a.items()) == sorted(b.items())
 
   diff = []
   if type(a.get('Private')) != dict or type(b.get('Private')) != dict:
     diff.append('/Private')
     return diff
   if a['CharStrings'] != b['CharStrings']:
-    print a['CharStrings']
-    print b['CharStrings']
+    print(a['CharStrings'])
+    print(b['CharStrings'])
     diff.append('/CharStrings')
   if a['Encoding'] != b['Encoding']:
     a_encoding = NormalizeEncoding(a['Encoding'], set(a['CharStrings']))
     b_encoding = NormalizeEncoding(b['Encoding'], set(b['CharStrings']))
     if a_encoding != b_encoding:
-      print a_encoding
-      print b_encoding
+      print(a_encoding)
+      print(b_encoding)
       diff.append('/Encoding')
   if a['FontName'] != b['FontName']:
-    print a['FontName']
-    print b['FontName']
+    print(a['FontName'])
+    print(b['FontName'])
     diff.append('/FontName')
 
-  for op, (op_name, op_type, op_default) in sorted(CFF_TOP_OP_MAP.iteritems()):
+  for op, (op_name, op_type, op_default) in sorted(CFF_TOP_OP_MAP.items()):
     if op_name not in ('charset', 'Encoding', 'CharStrings', 'Private'):
       if not IsCffValueEqual(a.get(op_name), b.get(op_name)):
-        print '-- /%s' % op_name
-        print a.get(op_name)
-        print b.get(op_name)
+        print('-- /%s' % op_name)
+        print(a.get(op_name))
+        print(b.get(op_name))
         diff.append('/%s' % op_name)
-  for op, (op_name, op_type, op_default) in sorted(CFF_PRIVATE_OP_MAP.iteritems()):
+  for op, (op_name, op_type, op_default) in sorted(CFF_PRIVATE_OP_MAP.items()):
     if op_name not in ('Subrs', 'GlobalSubrs'):
       if not IsCffValueEqual(a['Private'].get(op_name), b['Private'].get(op_name)):
-        print '-- /Private.%s' % op_name
-        print a['Private'].get(op_name)
-        print b['Private'].get(op_name)
+        print('-- /Private.%s' % op_name)
+        print(a['Private'].get(op_name))
+        print(b['Private'].get(op_name))
         diff.append('/Private.%s' % op_name)
   if a['Private'].get('Subrs') != b['Private'].get('Subrs'):
-    print a['Private'].get('Subrs')
-    print b['Private'].get('Subrs')
+    print(a['Private'].get('Subrs'))
+    print(b['Private'].get('Subrs'))
     diff.append('/Subrs')
   if a['Private'].get('GlobalSubrs') != b['Private'].get('GlobalSubrs'):
-    print a['Private'].get('GlobalSubrs')
-    print b['Private'].get('GlobalSubrs')
+    print(a['Private'].get('GlobalSubrs'))
+    print(b['Private'].get('GlobalSubrs'))
     diff.append('/GlobalSubrs')
   if not IsDictOptEqual(a['Private'].get('ParsedPostScript'), b['Private'].get('ParsedPostScript')):
-    print a['Private'].get('ParsedPostScript')
-    print b['Private'].get('ParsedPostScript')
+    print(a['Private'].get('ParsedPostScript'))
+    print(b['Private'].get('ParsedPostScript'))
     diff.append('/ParsedPostScript')
   # !! Compare all other fields as well.
   # !! Apply defaults to missing fields.
@@ -924,7 +914,7 @@ def YieldParsePostScriptTokenList(data):
       else:
         yield match.group(4)
     elif match.group(5) is not None:
-      yield '<%s>' % str(match.group(5)).encode('hex')
+      yield '<%s>' % HexEncode(match.group(5))
     elif match.group(6) is not None:
       value = _POSTSCRIPT_WHITESPACE_RE.sub('', match.group(6))
       if len(value) % 2:
@@ -975,7 +965,7 @@ def ParseCffNumber(op, number):
       raise ValueError('Invalid CFF float value for op %d: %r' %
                        (op, number))
     return float_util.FormatFloatShort(number, is_int_ok=False)
-  elif isinstance(number, (int, long)):
+  elif isinstance(number, int):
     return int(number)
   else:
     raise ValueError('Invalid CFF number value for op %d: %r' %
@@ -1022,7 +1012,7 @@ CFF_EXPERT_SUBSET_CHARSET = tuple(CffStringToName(CFF_STANDARD_STRINGS[i])
                                   for i in _CFF_EXPERT_SUBSET_CHARSET_SIDS)
 
 
-_CFF_ISO_ADOBE_CHARSET_SIDS = xrange(229)
+_CFF_ISO_ADOBE_CHARSET_SIDS = range(229)
 CFF_ISO_ADOBE_CHARSET = tuple(CffStringToName(CFF_STANDARD_STRINGS[i])
                               for i in _CFF_ISO_ADOBE_CHARSET_SIDS)
 
@@ -1041,7 +1031,7 @@ def ParseCffCharset(charset_value, data, len_charstrings, cff_all_string_bufs):
     not hex-escaped, starting with '.notdef'. The length is the same as
     len_charstrings.
   """
-  if not isinstance(charset_value, (int, long)):
+  if not isinstance(charset_value, int):
     raise TypeError
   if not isinstance(len_charstrings, int):
     raise TypeError
@@ -1080,7 +1070,7 @@ def ParseCffCharset(charset_value, data, len_charstrings, cff_all_string_bufs):
       if len(charset) + count > len_charstrings:
         raise ValueError('CFF /charset format 1 contains a too long range.')
       charset.extend(str(cff_all_string_bufs[sid]) for sid in
-                     xrange(first_sid, first_sid + count))
+                     range(first_sid, first_sid + count))
   elif format == 2:  # 9/8958; .
     i = 1
     while len(charset) < len_charstrings:
@@ -1092,11 +1082,11 @@ def ParseCffCharset(charset_value, data, len_charstrings, cff_all_string_bufs):
       if len(charset) + count > len_charstrings:
         raise ValueError('CFF /charset format 1 contains a too long range.')
       charset.extend(str(cff_all_string_bufs[sid]) for sid in
-                     xrange(first_sid, first_sid + count))
+                     range(first_sid, first_sid + count))
   else:
     raise ValueError('Invalid CFF /charset format: %d' % format)
   assert len(charset) == len_charstrings
-  return map(CffStringToName, charset)
+  return list(map(CffStringToName, charset))
 
 
 _CFF_STANDARD_ENCODING_SIDS = (
@@ -1151,7 +1141,7 @@ def ParseCffEncoding(encoding_value, data, charset, cff_all_string_bufs):
     A list of 256 glyph name strings, each starting with a '/', and
     hex-escaped.
   """
-  if not isinstance(encoding_value, (int, long)):
+  if not isinstance(encoding_value, int):
     raise TypeError
   _CffStringToName = CffStringToName
   if encoding_value < 10:
@@ -1197,13 +1187,13 @@ def ParseCffEncoding(encoding_value, data, charset, cff_all_string_bufs):
         raise ValueError('CFF /Encoding too short for format 0 codes.')
       encoding = ['/.notdef'] * 256
       j = 1
-      for _ in xrange(range_count):
+      for _ in range(range_count):
         first_code, count1 = struct.unpack('>BB', buffer(data, i, 2))
         if j + count1 >= len(charset):
           raise ValueError(
               'CFF /Encoding with format 1 longer than /CharStrings.')
         i += 2
-        for code in xrange(first_code, first_code + count1 + 1):
+        for code in range(first_code, first_code + count1 + 1):
           encoding[code] = charset[j]
           j += 1
     else:
@@ -1216,7 +1206,7 @@ def ParseCffEncoding(encoding_value, data, charset, cff_all_string_bufs):
       i += 1
       if i + 3 * count > len(data):
         raise ValueError('CFF /Encoding too short for supplement.')
-      for _ in xrange(count):
+      for _ in range(count):
         code, sid = struct.unpack('>BH', buffer(data, i, 3))
         i += 3
         encoding[code] = _CffStringToName(str(cff_all_string_bufs[sid]))
@@ -1266,7 +1256,7 @@ def ParseCffOp(op, op_value, op_name, op_type, op_default):
         except ValueError:
           raise ValueError('Invalid CFF float delta value for op %d: %r' %
                            (op, number))
-      elif isinstance(number, (int, long)):
+      elif isinstance(number, int):
         prev_number += int(number)
       else:
         raise ValueError('Invalid CFF number delta value for op %d: %r' %
@@ -1296,7 +1286,7 @@ def ParseCffOp(op, op_value, op_name, op_type, op_default):
       raise ValueError('Invalid size for CFF integer value for op %d: %d' %
                        (op, op_value))
     op_value = op_value[0]
-    if not isinstance(op_value, (int, long)):
+    if not isinstance(op_value, int):
       raise ValueError('Invalid CFF integer value for op %d: %r' %
                        (op, op_value))
     return int(op_value)
@@ -1306,7 +1296,7 @@ def ParseCffOp(op, op_value, op_name, op_type, op_default):
                        (op, op_value))
     result = []
     for number in op_value:
-      if not isinstance(number, (int, long)):
+      if not isinstance(number, int):
         raise ValueError('Invalid CFF integer value for op %d: %r' %
                          (op, number))
       result.append(int(number))
@@ -1356,7 +1346,7 @@ def ParseCff1(data, is_careful=False):
   # It's OK to have long font names. 5176.CFF.pdf says that the maximum
   # ``should be'' 127, but we don't check it.
   if CFF_NON_FONTNAME_CHAR_RE.search(cff_font_name):
-    raise ValueError('CFF font name %r contains invalid chars.' % font_name)
+    raise ValueError('CFF font name %r contains invalid chars.' % cff_font_name)
   cff_top_dict_buf = cff_font_items[0][1]
   top_dict = ParseCffDict(cff_top_dict_buf)
   if is_careful:
@@ -1380,7 +1370,7 @@ def ParseCff1(data, is_careful=False):
   cff_all_string_bufs.extend(cff_string_bufs)
   string_index_limit = len(cff_all_string_bufs)
   del cff_string_bufs
-  for op, op_value in sorted(top_dict.iteritems()):
+  for op, op_value in sorted(top_dict.items()):
     if op in _CFF_TOP_CIDFONT_OPERATORS:
       # First such operator must be /ROS in the top dict, but we don't care
       # about the order.
@@ -1405,7 +1395,7 @@ def ParseCff1(data, is_careful=False):
       if (len(op_value) != 1 or not isinstance(op_value[0], int) or
           op_value[0] <= 0):
         raise ValueError('Invalid SID value for CFF /%s: %r' %
-                         (op_name, value))
+                         (op_name, op_value))
       op_value = op_value[0]
       if op_value < string_index_limit:
         # TODO(pts): Deduplicate these values as both hex and regular strings.
@@ -1415,7 +1405,7 @@ def ParseCff1(data, is_careful=False):
         op_value = str(cff_all_string_bufs[op_value])
       else:
         raise ValueError('CFF string index value too large: %d' % op_value)
-      parsed_dict[op_name] = '<%s>' % op_value.encode('hex')
+      parsed_dict[op_name] = '<%s>' % HexEncode(op_value)
     else:
       parsed_dict[op_name] = _ParseCffOp(op, op_value, *op_entry)
   del top_dict
@@ -1439,11 +1429,11 @@ def ParseCff1(data, is_careful=False):
       private_dict2 = ParseCffDict(private_dict_ser)
       assert private_dict == private_dict2, (private_dict, private_dict2)
       del private_dict_ser, private_dict2
-    for op, op_value in sorted(private_dict.iteritems()):
+    for op, op_value in sorted(private_dict.items()):
       op_entry = _CFF_PRIVATE_OP_MAP.get(op)
-      op_name = op_entry[0]
       if op_entry is None:
         raise ValueError('Unknown CFF private dict op: %d' % op)
+      op_name = op_entry[0]
       parsed_private_dict[op_name] = _ParseCffOp(op, op_value, *op_entry)
     del private_dict
     if 'Subrs' in parsed_private_dict:
@@ -1454,7 +1444,7 @@ def ParseCff1(data, is_careful=False):
             'Invalid CFF /Subrs offset %d, expected at least %d.' %
             (subrs_ofs, cff_rest2_ofs))
       _, subr_bufs = ParseCffIndex(buffer(data, subrs_ofs))
-      op_value = ['<%s>' % str(buf).encode('hex') for buf in subr_bufs]
+      op_value = ['<%s>' % HexEncode(buf) for buf in subr_bufs]
       del subr_bufs
       if op_value:
         # Ghostscript also puts /Subrs into /Private.
@@ -1464,7 +1454,7 @@ def ParseCff1(data, is_careful=False):
       else:
         del parsed_private_dict['Subrs']
   # Ghostscript also puts /GlobalSubrs into /Private.
-  op_value = ['<%s>' % str(buf).encode('hex') for buf in cff_global_subr_bufs]
+  op_value = ['<%s>' % HexEncode(buf) for buf in cff_global_subr_bufs]
   if op_value:
     # Minimum /GlobalSubrs subr str length is 3 in cff.pgs.
     parsed_private_dict['GlobalSubrs'] = op_value
@@ -1487,7 +1477,7 @@ def ParseCff1(data, is_careful=False):
       charset, buffer(data, charset), len(charstring_bufs), cff_all_string_bufs)
   parsed_dict['CharStrings'] = dict(izip(
       (glyph_name[1:] for glyph_name in charset),
-      ('<%s>' % str(buf).encode('hex') for buf in charstring_bufs)))
+      ('<%s>' % HexEncode(buf) for buf in charstring_bufs)))
   del charstring_bufs
   encoding = parsed_dict.get('Encoding', 0)  # Default same as _CFF_TOP_OP_MAP.
   parsed_dict['Encoding'] = ParseCffEncoding(
@@ -1508,10 +1498,10 @@ def ParseCff1(data, is_careful=False):
       # Silently ignore parse errors in /PostScript.
       # !! Do the same parsing in main.ParseType1CFonts.
       parsed_ps = ParsePostScriptDefs(
-          parsed_dict['PostScript'][1 : -1].decode('hex'))
+          HexDecode(parsed_dict['PostScript'][1 : -1]))
     except ValueError:
-      parsed_ps = ()
-    if parsed_ps is not ():
+      parsed_ps = None
+    if parsed_ps is not None:
       if parsed_ps:
         parsed_dict['ParsedPostScript'] = parsed_ps
       parsed_dict.pop('PostScript')

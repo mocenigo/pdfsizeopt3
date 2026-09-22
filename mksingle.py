@@ -1,9 +1,9 @@
-#! /usr/bin/python
+#! /usr/bin/env python3
 # by pts@fazekas.hu at Fri Sep  1 16:34:46 CEST 2017
 
-"""Build single-file script for Unix: pdfsizeopt.single."""
+"""Build single-file script for Unix: pdfsizeopt3.single."""
 
-import cStringIO
+import io
 import os
 import os.path
 import re
@@ -16,10 +16,7 @@ import zipfile
 
 
 def Minify(source, output_func):
-  """Minifies Python (2.4, 2.5, 2.6 or 2.7) source code.
-
-  This function was tested and it works identically (consistently) in Python
-  2.4, 2.5, 2.6 and 2.7.
+  """Minifies Python 3 source code.
 
   The output will end with a newline, unless empty.
 
@@ -49,27 +46,19 @@ def Minify(source, output_func):
   * Any general compression (such as Flate, LZMA, bzip2).
 
   Args:
-    source: Python source code to minify. Can be str, buffer (or anything
-      convertible to a buffer, e.g. bytearray), a readline method of a
-      file-object or an iterable of line strs.
+    source: Python source code to minify. Can be str, bytes, a readline
+      method of a file-object or an iterable of line strs.
     output_func: Function which will be called with str arguments for each
       output piece.
   """
-  if isinstance(source, unicode):
-    raise TypeError
-  try:
-    buf = buffer(source)
-  except TypeError:
-    buf = None
-  if buf is not None:
-    import cStringIO
-    # This also works, except it's different at the end of the partial line:
-    # source = iter(line + '\n' for line in str(buf).splitlines()).next
-    source = cStringIO.StringIO(buf).readline
+  if isinstance(source, (bytes, bytearray)):
+    source = bytes(source).decode('ascii')
+  if isinstance(source, str):
+    source = io.StringIO(source).readline
   elif not callable(source):
     # Treat source as an iterable of lines. Add trailing '\n' if needed.
     source = iter(
-        line + '\n' * (not line.endswith('\n')) for line in source).next
+        line + '\n' * (not line.endswith('\n')) for line in source).__next__
 
   _COMMENT, _NL = tokenize.COMMENT, tokenize.NL
   _NAME, _NUMBER, _STRING = token.NAME, token.NUMBER, token.STRING
@@ -81,11 +70,6 @@ def Minify(source, output_func):
   is_at_bol = is_at_bof = 1  # Beginning of line and file.
   is_empty_indent = 0
   pt, ps = -1, ''  # Previous token.
-  # There are small differences in tokenize.generate_tokens in Python
-  # versions, but they don't affect us, so we don't care:
-  # * In Python <=2.4, the final DEDENTs and ENDMARKER are not yielded.
-  # * In Python <=2.5, the COMMENT ts contains the '\n', and a separate
-  #   NL is not generated.
   for tt, ts, _, _, _ in tokenize.generate_tokens(source):
     if tt == _INDENT:
       i += 1
@@ -149,10 +133,10 @@ def MinifyFile(file_name, code_orig):
 POSTSCRIPT_TOKEN_RE = re.compile(
     r'%[^\r\n]*|'  # Comment.
     r'[\0\t\n\r\f ]+|' # Whitespace.
-    r'(\((?:[^()\\]+|(?s)\\.)*\))|'  # 1: String literal.
+    r'(\((?:[^()\\]+|\\.)*\))|'  # 1: String literal.
     r'(<<|>>|[{}\[\]])|'  # 2: Token which stops the previous token.
     r'([^\0\t\n\r\f %(){}<>\[\]]+)|'  # 3. Multi-character token, '/' included.
-    r'(?s)(.)')  # 4. Anything else we don't recognize.
+    r'(.)', re.S)  # 4. Anything else we don't recognize.
 
 
 def MinifyPostScript(pscode):
@@ -177,12 +161,12 @@ def MinifyPostScript(pscode):
 def MinifyPostScriptProcsets(file_name, code_orig):
   code_obj = compile(code_orig, file_name, 'exec')
   globals_dict = {}
-  exec code_obj in globals_dict
+  exec(code_obj, globals_dict)
   for name in sorted(globals_dict):
     if name.startswith('__'):
       del globals_dict[name]
   names, pscodes = [], []
-  for name, pscode in sorted(globals_dict.iteritems()):
+  for name, pscode in sorted(globals_dict.items()):
     names.append(name)
     if not isinstance(pscode, str):
       raise ValueError('Expected pscode as str, got: %r' % type(pscode))
@@ -202,9 +186,9 @@ def MinifyPostScriptProcsets(file_name, code_orig):
 M_PY_CODE = r'''
 import sys
 
-if not ((2, 4) <= sys.version_info[:2] < (3, 0)):
+if sys.version_info[:2] < (3, 6):
   sys.stderr.write(
-      'fatal: Python version 2.4, 2.5, 2.6 or 2.7 needed for: %s\n' % sys.path[0])
+      'fatal: Python 3.6 or later needed for: %s\n' % sys.path[0])
   sys.exit(1)
 
 from pdfsizeopt import main
@@ -214,40 +198,42 @@ sys.exit(main.main(sys.argv, zip_file=sys.path[0]))
 
 SCRIPT_PREFIX = r'''#!/bin/sh --
 #
-# pdfsizeopt: PDF file size optimizer (single-file script for Unix)
+# pdfsizeopt3: PDF file size optimizer (single-file script for Unix)
 #
-# You need Python 2.4, 2.5, 2.6 or 2.7 to run this script. The shell script
-# below tries to find such an interpreter and then runs it.
-#
-# If you have Python 2.6 or Python 2.7, you can also run it directly with
-# Python, otherwise you have to run it as a shell script.
+# You need Python 3.6 or later to run this script. The shell script below
+# tries to find such an interpreter and then runs it. You can also run it
+# directly with Python 3 (python3 pdfsizeopt3.single ...).
 #
 
 P="$(readlink "$0" 2>/dev/null)"
 test "$P" && test "${P#/}" = "$P" && P="${0%/*}/$P"
 test "$P" || P="$0"
-Q="${P%/*}"/pdfsizeopt_libexec/python
-test -f "$Q" && exec "$Q" -E -- "$P" ${1+"$@"}
-type python2.7 >/dev/null 2>&1 && exec python2.7 -- "$P" ${1+"$@"}
-type python2.6 >/dev/null 2>&1 && exec python2.6 -- "$P" ${1+"$@"}
-type python2.5 >/dev/null 2>&1 && exec python2.5 -c"import sys;del sys.argv[0];sys.path[0]=sys.argv[0];import m" "$P" ${1+"$@"}
-type python2.4 >/dev/null 2>&1 && exec python2.4 -c"import sys;del sys.argv[0];sys.path[0]=sys.argv[0];import m" "$P" ${1+"$@"}
-exec python -c"import sys;del sys.argv[0];sys.path[0]=sys.argv[0];import m" "$P" ${1+"$@"}
+type python3 >/dev/null 2>&1 && exec python3 -- "$P" ${1+"$@"}
+exec python -- "$P" ${1+"$@"}
 exit 1
 
 '''
 
-def new_zipinfo(file_name, file_mtime, permission_bits=0644):
+def ReadSource(file_name):
+  f = open(file_name, encoding='ascii', newline='')
+  try:
+    return f.read()
+  finally:
+    f.close()
+
+
+def new_zipinfo(file_name, file_mtime, permission_bits=0o644):
   zipinfo = zipfile.ZipInfo(file_name, file_mtime)
-  zipinfo.external_attr = (0100000 | (permission_bits & 07777)) << 16
+  zipinfo.external_attr = (0o100000 | (permission_bits & 0o7777)) << 16
+  zipinfo.compress_type = zipfile.ZIP_DEFLATED
   return zipinfo
 
 
 def main(argv):
-  os.chdir(os.path.dirname(__file__))
+  os.chdir(os.path.dirname(os.path.abspath(__file__)))
   assert os.path.isfile('lib/pdfsizeopt/main.py')
   zip_output_file_name = 't.zip'
-  single_output_file_name = 'pdfsizeopt.single'
+  single_output_file_name = 'pdfsizeopt3.single'
   try:
     os.remove(zip_output_file_name)
   except OSError:
@@ -259,10 +245,11 @@ def main(argv):
     for file_name in (
         # 'pdfsizeopt/pdfsizeopt_pargparse.py',  # Not needed.
         'pdfsizeopt/__init__.py',
+        'pdfsizeopt/binstr.py',
         'pdfsizeopt/cff.py',
         'pdfsizeopt/float_util.py',
         'pdfsizeopt/main.py'):
-      code_orig = open('lib/' + file_name, 'rb').read()
+      code_orig = ReadSource('lib/' + file_name)
       # The zip(1) command also uses localtime. The ZIP file format doesn't
       # store the time zone.
       file_mtime = time.localtime(os.stat('lib/' + file_name).st_mtime)[:6]
@@ -280,14 +267,18 @@ def main(argv):
                 'import m')
 
     file_name = 'pdfsizeopt/psproc.py'
-    code_orig = open('lib/' + file_name, 'rb').read()
+    code_orig = ReadSource('lib/' + file_name)
     file_mtime = time.localtime(os.stat('lib/' + file_name).st_mtime)[:6]
     code_mini = MinifyPostScriptProcsets(file_name, code_orig)
     zf.writestr(new_zipinfo(file_name, file_mtime), code_mini)
   finally:
     zf.close()
 
-  subprocess.check_call(('advzip', '-qz4', '--', zip_output_file_name))
+  try:
+    subprocess.check_call(('advzip', '-qz4', '--', zip_output_file_name))
+  except OSError:
+    # advzip (from AdvanceCOMP) is optional, it just makes the output smaller.
+    sys.stderr.write('warning: advzip not found, output will be larger\n')
 
   f = open(zip_output_file_name, 'rb')
   try:
@@ -298,20 +289,20 @@ def main(argv):
 
   f = open(single_output_file_name, 'wb')
   try:
-    f.write(SCRIPT_PREFIX)
+    f.write(SCRIPT_PREFIX.encode('ascii'))
     f.write(data)
   finally:
     f.close()
 
-  os.chmod(single_output_file_name, 0755)
+  os.chmod(single_output_file_name, 0o755)
 
-  # Size reductions of pdfsizeopt.single:
+  # Size reductions of pdfsizeopt3.single:
   #
   # * 115100 bytes: mksingle.sh, before this script.
   # *  68591 bytes: Python minification, advzip, SCRIPT_PREFIX improvements.
   # *  63989 bytes: PostScript minification.
-  print >>sys.stderr, 'info: created %s (%d bytes)' % (
-      single_output_file_name, os.stat(single_output_file_name).st_size)
+  sys.stderr.write('info: created %s (%d bytes)\n' % (
+      single_output_file_name, os.stat(single_output_file_name).st_size))
 
 if __name__ == '__main__':
   sys.exit(main(sys.argv))

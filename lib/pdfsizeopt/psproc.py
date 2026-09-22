@@ -253,7 +253,16 @@ GENERIC = r'''
 % <fontname> TryFindFont <font-dict> true
 % <fontname> TryFindFont <false>
 /TryFindFont {
-  .FontDirectory 1 index .fontknownget {
+  /.fontknownget where {
+    pop .FontDirectory 1 index .fontknownget
+  } {  % Ghostscript >=9.5x doesn't have .FontDirectory and .fontknownget.
+    FontDirectory 1 index .knownget not {
+      GlobalFontDirectory 1 index .knownget
+    } {
+      true
+    } ifelse
+  } ifelse
+  {
     exch pop true
   } {
     pop false
@@ -274,7 +283,8 @@ TYPE1C_CONVERTER = r'''
   /EmbedAllFonts true
   /Optimize true
 >> setdistillerparams
-.setpdfwrite
+% Ghostscript >=9.5x doesn't have (and doesn't need) .setpdfwrite.
+/.setpdfwrite where {pop .setpdfwrite} if
 
 /eexec {
   1 index /FontName get userdict exch
@@ -473,18 +483,29 @@ TYPE1C_PARSER = r'''
 % Till gs 8.61:
 %   GS_PDF_ProcSet /FRD get -->
 %   {/FontSetInit /ProcSet findresource begin //true ReadData}
-GS_PDF_ProcSet /FRD .knownget not { pdfdict /readType1C get } if
-dup /FontSetInit FindItem
-  dup 0 lt { /MissingFontSetInit /invalidfileaccess signalerror } if
-1 index /ReadData FindItem
-  dup 0 lt { /MissingReadData /invalidfileaccess signalerror } if
-1 index sub 1 add getinterval
-cvx bind /LoadCff exch def
+%
+% Since gs 9.56, the PostScript-based PDF interpreter (containing
+% GS_PDF_ProcSet and pdfdict) is not available anymore (it's been
+% removed from gs 10.x), so for gs 8.63 or later we define LoadCff directly,
+% like pdfdict /readType1C does in gs 8.63 ... 9.55.
+revision 863 ge {
+  /LoadCff {
+    /FontSetInit /ProcSet findresource begin //true //false ReadData
+  } bind def
+} {
+  GS_PDF_ProcSet /FRD .knownget not { pdfdict /readType1C get } if
+  dup /FontSetInit FindItem
+    dup 0 lt { /MissingFontSetInit /invalidfileaccess signalerror } if
+  1 index /ReadData FindItem
+    dup 0 lt { /MissingReadData /invalidfileaccess signalerror } if
+  1 index sub 1 add getinterval
+  cvx bind /LoadCff exch def
+} ifelse
 % Now we have one of these:
 % /LoadCff { /FontSetInit /ProcSet findresource begin //true         ReadData
-%   pop } bind def  % gs 8.62 or earlier
+%   } bind def  % gs 8.62 or earlier
 % /LoadCff { /FontSetInit /ProcSet findresource begin //true //false ReadData
-%   pop } bind def  % gs 8.63 or later
+%   } bind def  % gs 8.63 or later
 
 /stream {  % <streamdict> stream -
   ReadStreamFile DecompressStreamFileWithReusableStreamDecode
@@ -515,6 +536,22 @@ cvx bind /LoadCff exch def
   _DataFile ( <<\n) writestring
   /MY TryFindFont {  % This can fail if the font data is corrupt.
     dup /FontType get 2 ne {/NotType2Font /invalidfileaccess signalerror} if
+    % Ghostscript >=9.5x maps glyph names to glyph indexes in /CharStrings,
+    % and it stores the charstrings in /CFFCharStrings (mapping glyph indexes
+    % to charstrings). Convert it back to the format of earlier Ghostscript
+    % versions: /CharStrings mapping glyph names to charstrings. Without
+    % this, font merging (MergeTwoType1CFonts) would mix up the glyphs.
+    dup /CFFCharStrings .knownget {
+      % stack: <font> <cffcharstrings>
+      1 index /CharStrings get dup length dict exch {
+        % stack: <font> <cffcharstrings> <newcharstrings> <name> <index>
+        3 index exch get 2 index 3 1 roll put
+      } forall
+      exch pop
+      % stack: <font> <newcharstrings>
+      exch dup length dict copy dup /CharStrings 4 -1 roll put
+      dup /CFFCharStrings undef dup /Decoding undef
+    } if
     % SUXX: the CFF /FontName got lost (overwritten by /MY above)
     {
       exch dup OMIT exch known not
@@ -547,7 +584,8 @@ TYPE1C_GENERATOR = r'''
   /EmbedAllFonts true
   /Optimize true
 >> setdistillerparams
-.setpdfwrite
+% Ghostscript >=9.5x doesn't have (and doesn't need) .setpdfwrite.
+/.setpdfwrite where {pop .setpdfwrite} if
 
 /endobj {  % <streamdict> endobj -
   % Undefine all fonts before running our font program.
