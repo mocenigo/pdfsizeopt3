@@ -37,7 +37,7 @@ test:
 # PDFSIZEOPT_GS to test with a specific Ghostscript.
 check: test $(SINGLE)
 	$(PYTHON) $(SINGLE) --use-pngout=no --use-jbig2=no \
-	    --do-require-image-optimizers=no extra/small.pdf check.tmp.pdf
+	    --do-require-image-optimizers=no test/small.pdf check.tmp.pdf
 	rm -f check.tmp.pdf
 
 install: $(SINGLE)

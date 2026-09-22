@@ -1,7 +1,7 @@
 #! /bin/sh
 # by pts@fazekas.hu at Tue Oct  8 14:51:23 CEST 2013
 
-PYTHON_FILES="$(find pdfsizeopt_test.py lib extra -name '*.py' |
+PYTHON_FILES="$(find pdfsizeopt_test.py lib -name '*.py' |
     grep -v '^lib/pdfsizeopt/pdfsizeopt_argparse[.]py$')"
 if ! test "$PYTHON_FILES"; then
   echo "No Python source files found." >&2
