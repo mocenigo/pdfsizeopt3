@@ -6,7 +6,7 @@ Peter Szabo, ported to Python 3 and to current Ghostscript versions
 and Ghostscript 9.05. pdfsizeopt3 is installed as the command `pdfsizeopt3`,
 so it can be used next to the original (Python 2) `pdfsizeopt`. With the
 same Ghostscript and image optimizers, it produces the same output as the
-original.
+original. See CHANGES.md for the list of changes.
 
 pdfsizeopt is a program for converting large PDF files to small ones,
 without decreasing visual quality or removing interactive features (such as
